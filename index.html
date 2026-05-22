@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Interface - Fullscreen Sync Header</title>
+    <style>
+        :root {
+            --bg-page: #f9f9f9;
+            --panel-gray: #b2b2b2;
+            --accent-green: #7cfc00;
+            --header-bg: #1a1a1a;
+        }
+
+        body.dark-mode { --bg-page: #121212; --header-bg: #000; }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg-page);
+            font-family: sans-serif;
+            display: flex; flex-direction: column;
+            height: 100vh; overflow: hidden;
+            transition: background-color 0.3s ease;
+        }
+
+        header {
+            background: var(--header-bg);
+            height: 35px; display: flex; align-items: center;
+            padding: 0 15px; cursor: pointer; z-index: 3000; /* Stays on top */
+            position: relative;
+        }
+
+        .back-btn {
+            background: #fff; border: 1.5px solid #000;
+            padding: 2px 12px; cursor: pointer; font-weight: bold;
+            font-size: 10px; border-radius: 4px; box-shadow: 2px 2px 0px #444;
+        }
+
+        /* Main Viewport Container */
+        #main-viewport {
+            flex: 1; background-color: #000;
+            position: relative; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 500;
+        }
+
+        /* Fullscreen Logic: Main fills everything below header */
+        body.fullscreen-active #main-viewport {
+            position: absolute;
+            top: 35px; /* Directly below the header */
+            left: 0;
+            width: 100vw; 
+            height: calc(100vh - 35px);
+            z-index: 2000;
+        }
+
+        .bottom-panel {
+            height: 180px; display: grid;
+            grid-template-columns: 1fr 1fr; gap: 10px;
+            padding: 10px; box-sizing: border-box;
+            transition: all 0.3s ease;
+        }
+
+        /* Hides bottom panel in fullscreen */
+        body.fullscreen-active .bottom-panel { display: none; }
+
+        .left-side { display: flex; flex-direction: column; gap: 5px; }
+
+        .perf-bar {
+            background-color: var(--accent-green);
+            height: 22px; border: 1.5px solid #000;
+            display: flex; align-items: center; justify-content: center;
+            font-family: monospace; font-size: 9px; font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .box {
+            background-color: var(--panel-gray);
+            border: 1.5px solid #444; position: relative;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; cursor: pointer; border-radius: 2px;
+        }
+
+        .photo-box { flex: 1; }
+
+        h2 { font-size: 20px; color: #111; z-index: 100; pointer-events: none; margin: 0; text-align: center; }
+        #main-viewport h2 { color: #fff; opacity: 0.4; }
+
+        /* Media Elements */
+        video, img {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; background: #000;
+            display: none; z-index: 50;
+        }
+
+        video { object-fit: cover; }
+        img { object-fit: contain; }
+
+        input { display: none; }
+    </style>
+</head>
+<body>
+
+    <header onclick="document.body.classList.toggle('dark-mode')">
+        <button class="back-btn" onclick="event.stopPropagation(); history.back()">Back</button>
+    </header>
+
+    <div id="main-viewport">
+        <h2 id="main-label">Upload Video<br><small style="font-size: 10px;">Double Tap Fullscreen</small></h2>
+        <video id="main-player" loop muted playsinline></video>
+        <input type="file" id="main-input" accept="video/*">
+    </div>
+
+    <div class="bottom-panel">
+        <div class="left-side">
+            <div class="perf-bar" id="monitor">SYSTEM_READY</div>
+            <div class="box photo-box" onclick="document.getElementById('photo-input').click()">
+                <h2 id="photo-label">Photo</h2>
+                <img id="photo-display">
+                <input type="file" id="photo-input" accept="image/*">
+            </div>
+        </div>
+
+        <div class="box" id="cam-box" onclick="document.getElementById('cam-input').click()">
+            <h2 id="cam-label" onclick="event.stopPropagation(); startCamera()">Live cam</h2>
+            <video id="cam-player" loop muted playsinline></video>
+            <input type="file" id="cam-input" accept="video/*">
+        </div>
+    </div>
+
+    <script>
+        const monitor = document.getElementById('monitor');
+        const mainVid = document.getElementById('main-player');
+        const camVid = document.getElementById('cam-player');
+        const viewport = document.getElementById('main-viewport');
+
+        // Monitoring Stats
+        const stats = [
+            () => `LOAD: ${Math.floor(Math.random()*20+80)}%`,
+            () => `TEMP: ${Math.floor(Math.random()*5+40)}°C`,
+            () => `SYNC_STREAM: ACTIVE`
+        ];
+        setInterval(() => {
+            monitor.innerText = stats[Math.floor(Math.random()*stats.length)]();
+        }, 1200);
+
+        // SYNC LOGIC
+        function syncAndPlay() {
+            if (mainVid.src || mainVid.srcObject) mainVid.currentTime = 0;
+            if (camVid.src || camVid.srcObject) camVid.currentTime = 0;
+            if (mainVid.src || mainVid.srcObject) mainVid.play();
+            if (camVid.src || camVid.srcObject) camVid.play();
+        }
+
+        // DOUBLE TAP / SINGLE TAP LOGIC
+        let lastTap = 0;
+        viewport.addEventListener('click', function(e) {
+            const now = new Date().getTime();
+            const timesince = now - lastTap;
+            if ((timesince < 300) && (timesince > 0)) {
+                // Double Tap: Toggle Fullscreen
+                document.body.classList.toggle('fullscreen-active');
+            } else {
+                // Single Tap: Trigger Upload
+                document.getElementById('main-input').click();
+            }
+            lastTap = now;
+        });
+
+        // Main Video Input
+        document.getElementById('main-input').onchange = function() {
+            const file = this.files[0];
+            if (file) {
+                mainVid.src = URL.createObjectURL(file);
+                mainVid.style.display = 'block';
+                document.getElementById('main-label').style.display = 'none';
+                mainVid.onloadeddata = syncAndPlay;
+            }
+        };
+
+        // Photo Input (No Crop)
+        document.getElementById('photo-input').onchange = function() {
+            const file = this.files[0];
+            if (file) {
+                const img = document.getElementById('photo-display');
+                img.src = URL.createObjectURL(file);
+                img.style.display = 'block';
+                document.getElementById('photo-label').style.display = 'none';
+            }
+        };
+
+        // Cam Box Video Upload
+        document.getElementById('cam-input').onchange = function() {
+            const file = this.files[0];
+            if (file) {
+                camVid.src = URL.createObjectURL(file);
+                camVid.style.display = 'block';
+                document.getElementById('cam-label').style.display = 'none';
+                camVid.onloadeddata = syncAndPlay;
+            }
+        };
+
+        // Live Camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                camVid.srcObject = stream;
+                camVid.style.display = 'block';
+                document.getElementById('cam-label').style.display = 'none';
+                camVid.onloadedmetadata = syncAndPlay;
+            } catch (e) { alert("Camera Error"); }
+        }
+    </script>
+</body>
+</html>
